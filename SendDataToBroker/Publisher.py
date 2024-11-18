@@ -1,36 +1,55 @@
+import datetime
 import paho.mqtt.client as mqtt
+import json
+import time
 
-# MQTT broker details
 BROKER = "broker.emqx.io"
-PORT = 1883  # Using TCP port
-TOPIC = "test/topic"  # Replace with your desired topic
-MESSAGE = "Hello, MQTT!"  # Replace with your desired message
+PORT = 1883  
+TOPIC = "Employees Es4031/topic"
 
-# Define callback for successful connection
+current_time = datetime.datetime.now()
+current_time = current_time.strftime("%Y-%m-%d %H:%M:%S")
+id = 0
+payload = {
+    "ID": id,
+    "name": "Unknown",
+    "time": current_time,
+    "status": "Failed",
+}
+
+MESSAGE = json.dumps(payload)
+
 def on_connect(client, userdata, flags, rc):
     if rc == 0:
         print("Connected to MQTT Broker!")
-        # Publish message to topic after successful connection
         client.publish(TOPIC, MESSAGE)
-        print(f"Message published: {MESSAGE}")
+        print(f"Published JSON message: {MESSAGE}")
     else:
         print(f"Failed to connect, return code {rc}")
 
-# Initialize MQTT client
 client = mqtt.Client()
 
-# Assign callback functions
 client.on_connect = on_connect
 
 try:
-    # Connect to the broker
-    client.connect(BROKER, PORT)
-    # Start the MQTT client loop to process network traffic
-    client.loop_start()
+    for i in range(2):
+        client.connect(BROKER, PORT)
+        client.loop_start()
+        time.sleep(5)
+        current_time = datetime.datetime.now()
+        current_time = current_time.strftime("%Y-%m-%d %H:%M:%S")
+        id += 1
+        payload = {
+        "ID": id,
+        "name": "Ali Sh",
+        "time": current_time,
+        "status": "Success",
+        }
+        MESSAGE = json.dumps(payload)
+        
 except Exception as e:
     print(f"An error occurred: {e}")
 
-# Keep the script running
 input("Press Enter to exit...\n")
 client.loop_stop()
 client.disconnect()
