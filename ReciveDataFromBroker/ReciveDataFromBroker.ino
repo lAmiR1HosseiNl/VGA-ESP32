@@ -1,75 +1,91 @@
-#include <WiFi.h>                // For ESP32
-#include <PubSubClient.h>        // MQTT library
+#include <WiFi.h>
+#include <PubSubClient.h>
 
 // WiFi credentials
-const char* ssid = "AmirHossein";           
-const char* password = "amir1382raeghi";   
+const char *ssid = "AmirHossein";           // Replace with your Wi-Fi name
+const char *password = "amir1382raeghi";   // Replace with your Wi-Fi password
 
-// MQTT broker details
-const char* mqtt_server = "broker.emqx.io";    // MQTT broker
-const int mqtt_port = 1883;                    // MQTT port
-const char* mqtt_topic = "test/topic";         // MQTT topic to subscribe to
+// MQTT broker credentials
+const char *mqtt_broker = "broker.emqx.io";
+const char *topic = "test/topic";          // MQTT topic to publish and subscribe to
+const char *mqtt_username = "emqx";       // Optional username (for public broker, "emqx" is fine)
+const char *mqtt_password = "public";     // Optional password
+const int mqtt_port = 1883;               // Non-SSL port for MQTT
 
 WiFiClient espClient;
 PubSubClient client(espClient);
 
-// Callback function to handle incoming messages
-void callback(char* topic, byte* payload, unsigned int length) {
-  Serial.print("Message arrived on topic: ");
-  Serial.println(topic);
-  
-  Serial.print("Message: ");
-  for (unsigned int i = 0; i < length; i++) {
-    Serial.print((char)payload[i]);
-  }
-  Serial.println();
-}
+// Function to connect to Wi-Fi
+void connectToWiFi() {
+    Serial.print("Connecting to Wi-Fi: ");
+    Serial.println(ssid);
+    WiFi.begin(ssid, password);
 
-void setup_wifi() {
-  delay(10);
-  Serial.println("Connecting to WiFi...");
-  WiFi.begin(ssid, password);
-  
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
-  
-  Serial.println("\nWiFi connected!");
-  Serial.print("IP Address: ");
-  Serial.println(WiFi.localIP());
-}
-
-void reconnect() {
-  // Reconnect to MQTT broker if disconnected
-  while (!client.connected()) {
-    Serial.print("Connecting to MQTT broker...");
-    if (client.connect("ESP32Client")) {
-      Serial.println("connected!");
-      // Subscribe to the topic
-      client.subscribe(mqtt_topic);
-      Serial.println("Subscribed to topic!");
-    } else {
-      Serial.print("Failed, rc=");
-      Serial.print(client.state());
-      Serial.println(" trying again in 5 seconds...");
-      delay(5000);
+    while (WiFi.status() != WL_CONNECTED) {
+        delay(500);
+        Serial.print(".");
     }
-  }
+
+    Serial.println("\nConnected to Wi-Fi");
+    Serial.print("IP Address: ");
+    Serial.println(WiFi.localIP());
+}
+
+// Function to connect to the MQTT broker
+void connectToMQTT() {
+    while (!client.connected()) {
+        String client_id = "esp32-client-";
+        client_id += String(WiFi.macAddress());
+        Serial.printf("Connecting to MQTT broker with client ID: %s\n", client_id.c_str());
+
+        // Attempt to connect to MQTT broker
+        if (client.connect(client_id.c_str(), mqtt_username, mqtt_password)) {
+            Serial.println("Connected to MQTT broker");
+            // Subscribe to the topic
+            client.subscribe(topic);
+            Serial.printf("Subscribed to topic: %s\n", topic);
+        } else {
+            Serial.print("Failed to connect to MQTT broker. State: ");
+            Serial.println(client.state());
+            delay(2000); // Retry every 2 seconds
+        }
+    }
+}
+
+// Callback function to handle incoming messages
+void callback(char *topic, byte *payload, unsigned int length) {
+    Serial.println("-----------------------");
+    Serial.printf("Message arrived in topic: %s\n", topic);
+    Serial.print("Message: ");
+    for (int i = 0; i < length; i++) {
+        Serial.print((char)payload[i]);
+    }
+    Serial.println("\n-----------------------");
 }
 
 void setup() {
-  Serial.begin(115200);
-  
-  setup_wifi();         // Connect to WiFi
-  client.setServer(mqtt_server, mqtt_port);  // Set MQTT broker and port
-  client.setCallback(callback);             // Set callback function
+    Serial.begin(115200);
+
+    // Connect to Wi-Fi
+    connectToWiFi();
+
+    // Configure MQTT client
+    client.setServer(mqtt_broker, mqtt_port);
+    client.setCallback(callback);
+
+    // Connect to MQTT broker
+    connectToMQTT();
+
+    // Publish a welcome message
+    client.publish(topic, "Hi, I'm ESP32 ^^");
 }
 
 void loop() {
-  if (!client.connected()) {
-    reconnect();        // Reconnect if disconnected
-  }
-  
-  client.loop();        // Process MQTT messages
+    // Ensure the client stays connected
+    if (!client.connected()) {
+        connectToMQTT();
+    }
+
+    // Process MQTT messages
+    client.loop();
 }
