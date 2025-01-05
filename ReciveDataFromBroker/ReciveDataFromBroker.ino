@@ -9,6 +9,103 @@
 // Bitluni's ESP32 VGA library
 #include <ESP32Video.h>          
 #include <Ressources/Font6x8.h>  // Built-in 6x8 font
+#include "Arial12.h"
+/*******************************************************************
+ * drawCharArial12():
+ *   - Renders a single character C at (x, y) using the 18-pixel-high 
+ *     variable-width font data from Arial12.h
+ *   - color is a VGA color from vga.RGB(r,g,b).
+ *******************************************************************/
+void drawCharArial12(VGA3Bit &vga, int x, int y, char c, uint16_t color)
+{
+  // 1) Ensure the char is in range 0x20..0x7F
+  if (c < 32 || c > 127) {
+    c = '?'; // or just return if you prefer to skip
+  }
+  
+  // 2) Look up the 'index' in Arial12Index_table for this character
+  uint8_t index = Arial12Index_table[(uint8_t)c];
+  
+  // 3) Get the glyph's width and offset in the data array
+  uint8_t  width  = Arial12Width_table[index];
+  uint16_t offset = Arial12Offset_table[index];
+  
+  // 4) Figure out how many bytes total store this glyph
+  //    by subtracting next offset (watch for boundary)
+  uint16_t nextOffset = 0;
+  if (index < 95) // (There are 96 printable chars from 0x20 to 0x7F in that table)
+    nextOffset = Arial12Offset_table[index + 1];
+  else
+    nextOffset = sizeof(Arial12Data_table); // fallback
+
+  uint16_t glyphSize = nextOffset - offset;
+
+  // 5) Pointer to the raw bitmap data for this glyph
+  const unsigned char *glyphData = &Arial12Data_table[offset];
+
+  // 6) The font is stated as 18 pixels tall, so we loop rows 0..17
+  //    For each row, we read 'width' bits from the glyphData in big-endian
+  //    bitIndex = row * width + col
+  //    byteIndex = bitIndex / 8
+  //    bitInByte = 7 - (bitIndex % 8)
+  for (int row = 0; row < 18; row++)
+  {
+    for (int col = 0; col < width; col++)
+    {
+      int bitIndex   = row * width + col;       // Which bit overall
+      int byteIndex  = bitIndex / 8;            // Which byte in glyphData
+      int bitInByte  = 7 - (bitIndex % 8);      // Big-endian
+      if (byteIndex < glyphSize)
+      {
+        unsigned char b = glyphData[byteIndex];
+        if ((b >> bitInByte) & 0x01)
+        {
+          // Pixel is 'on'
+          vga.dotFast(x + col, y + row, color);
+        }
+        else
+        {
+          // If you want a background color, you could draw it here.
+          // Otherwise, do nothing for 'off' pixel
+        }
+      }
+    }
+  }
+}
+
+/*******************************************************************
+ * drawStringArial12():
+ *   - Loops over each character in 'text' and calls drawCharArial12().
+ *   - Moves 'x' horizontally by (glyphWidth + 1) each time.
+ *   - Honor '\n' by moving down 18 pixels and resetting x to start.
+ *******************************************************************/
+void drawStringArial12(VGA3Bit &vga, int x, int y, const char *text, uint16_t color)
+{
+  int startX = x;  // so we can return to left margin on '\n'
+
+  while (*text)
+  {
+    char c = *text++;
+
+    if (c == '\n')
+    {
+      // Move down one line, back to startX
+      x  = startX;
+      y += 18; // font height
+      continue;
+    }
+
+    // Render one character
+    uint8_t index = Arial12Index_table[(uint8_t)c];
+    uint8_t width = Arial12Width_table[index];
+
+    drawCharArial12(vga, x, y, c, color);
+
+    // Advance x by the character's width plus maybe 1 for spacing
+    x += width + 1;
+  }
+}
+
 
 /****************************************************
  * 2) Wi-Fi and MQTT Credentials
@@ -139,7 +236,7 @@ void drawIdleScreen()
   fillScreen(vga.RGB(255, 255, 255));
 
   // 2) Title
-  printText(10, 10, "Employee List", vga.RGB(0, 0, 0));
+  drawStringArial12(vga ,10, 10, "Employee List", vga.RGB(0, 0, 0));
 
   // 3) Table header with borders
   int tableX = 10;
@@ -361,7 +458,7 @@ void setup()
   vga.init(VGAMode::MODE320x240,
            VGA_RED_PIN, VGA_GREEN_PIN, VGA_BLUE_PIN,
            VGA_HSYNC_PIN, VGA_VSYNC_PIN);
-  vga.setFont(Font6x8);    // Use the 6x8 built-in font
+  vga.setFont(Font6x8);    // Use the Arial12 custom font
   vga.clear(vga.RGB(0, 0, 0)); // Clear with black
   Serial.println("VGA Initialized.");
 
