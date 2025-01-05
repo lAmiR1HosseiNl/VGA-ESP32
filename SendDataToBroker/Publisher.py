@@ -1,174 +1,228 @@
-import datetime
-import paho.mqtt.client as mqtt
-import json
-import time
-import sqlite3
-import threading
+#include <Arduino.h>
+#include <WiFi.h>
+#include <PubSubClient.h>
+#include <ArduinoJson.h>
+#include <ESP32Video.h>          
+#include <Ressources/Font6x8.h>
 
-# MQTT Broker details
-BROKER = "broker.emqx.io"
-PORT = 1883
-TOPIC = "Employees Es4031/topic"
+const char* ssid         = "AmirHossein";
+const char* password     = "amir1382raeghi";
+const char* mqtt_broker  = "broker.emqx.io";
+const char* mqtt_topic   = "Employees Es4031/topic";
+const int   mqtt_port    = 1883;
 
-# Create SQLite database connection and cursor
-# Enabled check_same_thread=False for multi-threaded access
-conn = sqlite3.connect("Employees.db", check_same_thread=False)
-cur = conn.cursor()
+WiFiClient espClient;
+PubSubClient mqttClient(espClient);
 
-# Create table if it doesn't exist
-cur.execute('''
-CREATE TABLE IF NOT EXISTS employees (
-    id INTEGER PRIMARY KEY,
-    name TEXT NOT NULL,
-    enter_time TEXT NOT NULL,
-    exit_time TEXT,
-    status TEXT NOT NULL,
-    elapsed_time INTEGER DEFAULT 0
-)
-''')
-conn.commit()
+const int VGA_RED_PIN   = 18;
+const int VGA_GREEN_PIN = 22;
+const int VGA_BLUE_PIN  = 21;
+const int VGA_HSYNC_PIN = 16;
+const int VGA_VSYNC_PIN = 17;
 
-# MQTT Client Setup
-client = mqtt.Client()
+#define SCREEN_WIDTH  320
+#define SCREEN_HEIGHT 240
 
-def on_connect(client, userdata, flags, rc):
-    if rc == 0:
-        print("Connected to MQTT Broker!")
-        client.subscribe(TOPIC)
-        print(f"Subscribed to topic: {TOPIC}")
-    else:
-        print(f"Failed to connect, return code {rc}")
+VGA3Bit vga;
 
-client.on_connect = on_connect
+struct Employee {
+  int     id;
+  String  name;
+  String  enter_time;
+  String  exit_time;
+};
 
-def add_to_db(payload):
-    try:
-        # Use INSERT OR REPLACE to handle unique constraint on 'id'
-        cur.execute('''
-        INSERT OR REPLACE INTO employees (id, name, enter_time, exit_time, status, elapsed_time)
-        VALUES (?, ?, ?, ?, ?, ?)
-        ''', (
-            payload["ID"],
-            payload["name"],
-            payload["enter_time"],
-            payload.get("exit_time"),
-            payload["status"],
-            payload.get("elapsed_time", 0)
-        ))
-        conn.commit()
-    except sqlite3.Error as e:
-        print(f"SQLite error: {e}")
+#include <vector>
+std::vector<Employee> employees;
 
-def update_status_to_idle(employee_id):
-    # Wait for 5 seconds before setting status to 'Idle'
-    time.sleep(5)
-    try:
-        # Retrieve enter_time to calculate elapsed_time
-        cur.execute('SELECT enter_time FROM employees WHERE id = ?', (employee_id,))
-        row = cur.fetchone()
-        if row and row[0]:
-            enter_time_str = row[0]
-            enter_time = datetime.datetime.strptime(enter_time_str, "%Y-%m-%d %H:%M:%S")
-            current_time = datetime.datetime.now()
-            elapsed_time = int((current_time - enter_time).total_seconds())
-            exit_time_str = current_time.strftime("%Y-%m-%d %H:%M:%S")
-            
-            # Update status to 'Idle', set exit_time and elapsed_time
-            cur.execute('''
-            UPDATE employees
-            SET status = ?, exit_time = ?, elapsed_time = ?
-            WHERE id = ?
-            ''', ("Idle", exit_time_str, elapsed_time, employee_id))
-            conn.commit()
+enum DeviceState {
+  STATE_IDLE,
+  STATE_SUCCESS,
+  STATE_FAILED
+};
 
-            # Publish the updated status
-            cur.execute('SELECT * FROM employees WHERE id = ?', (employee_id,))
-            updated_row = cur.fetchone()
-            if updated_row:
-                data = {
-                    "ID": updated_row[0],
-                    "name": updated_row[1],
-                    "enter_time": updated_row[2],
-                    "exit_time": updated_row[3],
-                    "status": updated_row[4],
-                    "elapsed_time": updated_row[5]
-                }
-                json_data = json.dumps(data)    
-                print(f"Sending updated data: {json_data}")
-                client.publish(TOPIC, json_data)
-        else:
-            print(f"No enter_time found for employee ID {employee_id}")
-    except sqlite3.Error as e:
-        print(f"SQLite error during status update: {e}")
-    except Exception as ex:
-        print(f"Error in update_status_to_idle: {ex}")
+DeviceState currentState = STATE_IDLE;
+unsigned long stateStartTime = 0;
 
-def publish_employee_data(employee):
-    try:
-        json_data = json.dumps(employee)
-        print(f"Sending data: {json_data}")
-        client.publish(TOPIC, json_data)
-    except Exception as e:
-        print(f"Error publishing data: {e}")
+String lastSuccessName = "";
 
-def simulate_attendance():
-    # Example employees data
-    employees_data = [
-        {
-            "ID": 0,
-            "name": "Unknown",
-            "status": "Failed"
-        },
-        {
-            "ID": 1,
-            "name": "Amirhosein",
-            "status": "Success"
-        },
-        {
-            "ID": 2,
-            "name": "Ali",
-            "status": "Success"
-        }
-    ]
+void fillScreen(uint16_t color) {
+  for (int y = 0; y < SCREEN_HEIGHT; y++) {
+    for (int x = 0; x < SCREEN_WIDTH; x++) {
+      vga.dotFast(x, y, color);
+    }
+  }
+}
 
-    for emp in employees_data:
-        current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        payload = {
-            "ID": emp["ID"],
-            "name": emp["name"],
-            "enter_time": current_time,
-            "exit_time": None,
-            "status": emp["status"],
-            "elapsed_time": 0  # Initial elapsed_time
-        }
-        add_to_db(payload)
-        publish_employee_data(payload)
-        
-        # Start a thread to update status to 'Idle' after 5 seconds
-        threading.Thread(target=update_status_to_idle, args=(emp["ID"],)).start()
-        
-        time.sleep(1)  # Simulate time between attendances
+void drawBox(int x, int y, int width, int height, uint16_t borderColor, uint16_t fillColor) {
+  for (int i = 0; i < height; i++) {
+    for (int j = 0; j < width; j++) {
+      if (i == 0 || i == height - 1 || j == 0 || j == width - 1) {
+        vga.dotFast(x + j, y + i, borderColor);
+      } else {
+        vga.dotFast(x + j, y + i, fillColor);
+      }
+    }
+  }
+}
 
-def main():
-    try:
-        client.connect(BROKER, PORT, keepalive=60)
-        client.loop_start()
-        time.sleep(2)  # Wait for connection
-        
-        simulate_attendance()
-        
-        # Keep the script running to handle idle updates
-        while True:
-            time.sleep(1)
-            
-    except Exception as e:
-        print(f"An error occurred: {e}")
-    finally:
-        # Clean up and disconnect
-        input("Press Enter to exit...\n")
-        client.loop_stop()
-        client.disconnect()
-        conn.close()
+void printText(int x, int y, const char* text, uint16_t color) {
+  vga.setTextColor(color);
+  vga.setCursor(x, y);
+  vga.print(text);
+}
 
-if __name__ == "__main__":
-    main()
+void drawIdleScreen() {
+  fillScreen(vga.RGB(255, 255, 255));
+  drawBox(5, 5, 310, 230, vga.RGB(0, 0, 0), vga.RGB(148, 227, 178));
+  printText(10, 10, "Employee List", vga.RGB(0, 0, 0));
+  int startY = 30;
+  printText(10, startY, "ID   NAME           ENTER_TIME          EXIT_TIME", vga.RGB(0, 0, 0));
+  int rowSpacing = 10;
+  int y = startY + rowSpacing + 5;
+  for (size_t i = 0; i < employees.size(); i++) {
+    char buffer[200];
+    snprintf(buffer, sizeof(buffer), "%-4d %-15s %-20s %-20s", employees[i].id, employees[i].name.substring(0,15).c_str(), employees[i].enter_time.substring(0,20).c_str(), employees[i].exit_time.substring(0,20).c_str());
+    printText(10, y, buffer, vga.RGB(0, 0, 0));
+    y += rowSpacing;
+    if (y > SCREEN_HEIGHT - 10) break;
+  }
+}
+
+void drawSuccessScreen() {
+  fillScreen(vga.RGB(0, 255, 0));
+  drawBox(40, 30, 240, 180, vga.RGB(0, 0, 0), vga.RGB(148, 227, 178));
+  String welcomeMsg = "Welcome " + lastSuccessName;
+  printText(50, 80, welcomeMsg.c_str(), vga.RGB(0, 0, 0));
+  printText(140, 120, "✓", vga.RGB(0, 0, 0));
+}
+
+void drawFailedScreen() {
+  fillScreen(vga.RGB(255, 0, 0));
+  drawBox(40, 30, 240, 180, vga.RGB(0, 0, 0), vga.RGB(148, 227, 178));
+  printText(50, 80, "Failed to login", vga.RGB(0, 0, 0));
+  printText(140, 120, "✗", vga.RGB(0, 0, 0));
+}
+
+void updateDisplay() {
+  switch (currentState) {
+    case STATE_IDLE:
+      drawIdleScreen();
+      break;
+    case STATE_SUCCESS:
+      drawSuccessScreen();
+      break;
+    case STATE_FAILED:
+      drawFailedScreen();
+      break;
+  }
+}
+
+void mqttCallback(char* topic, byte* payload, unsigned int length) {
+  Serial.print("Message arrived on topic: ");
+  Serial.println(topic);
+  String message;
+  for (unsigned int i = 0; i < length; i++) message += (char)payload[i];
+  Serial.println("Payload: " + message);
+  StaticJsonDocument<512> doc;
+  DeserializationError error = deserializeJson(doc, message);
+  if (error) {
+    Serial.print("deserializeJson() failed: ");
+    Serial.println(error.f_str());
+    return;
+  }
+  int    id           = doc["ID"]           | -1;
+  String name         = doc["name"]         | "";
+  String enter_time   = doc["enter_time"]   | "";
+  String exit_time    = doc["exit_time"]    | "";
+  String status       = doc["status"]       | "";
+  Serial.printf("Parsed => ID:%d, Name:%s, Status:%s\n", id, name.c_str(), status.c_str());
+  bool found = false;
+  for (auto &emp : employees) {
+    if (emp.id == id) {
+      emp.name         = name;
+      emp.enter_time   = enter_time;
+      emp.exit_time    = exit_time.isEmpty() ? "N/A" : exit_time;
+      found = true;
+      break;
+    }
+  }
+  if (!found) {
+    Employee newEmp;
+    newEmp.id           = id;
+    newEmp.name         = name;
+    newEmp.enter_time   = enter_time;
+    newEmp.exit_time    = exit_time.isEmpty() ? "N/A" : exit_time;
+    employees.push_back(newEmp);
+  }
+  if (status.equalsIgnoreCase("Success")) {
+    currentState = STATE_SUCCESS;
+    lastSuccessName = name;
+    stateStartTime = millis();
+  } else if (status.equalsIgnoreCase("Failed")) {
+    currentState = STATE_FAILED;
+    stateStartTime = millis();
+  } else {
+    currentState = STATE_IDLE;
+  }
+  updateDisplay();
+}
+
+void connectToWiFi() {
+  Serial.print("Connecting to Wi-Fi: ");
+  Serial.println(ssid);
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("\nWi-Fi connected.");
+  Serial.print("IP address: ");
+  Serial.println(WiFi.localIP());
+}
+
+void connectToMQTT() {
+  while (!mqttClient.connected()) {
+    String clientId = "ESP32-";
+    clientId += String(random(0xffff), HEX);
+    Serial.print("Connecting to MQTT... ");
+    if (mqttClient.connect(clientId.c_str())) {
+      Serial.println("connected.");
+      mqttClient.subscribe(mqtt_topic);
+      Serial.print("Subscribed to topic: ");
+      Serial.println(mqtt_topic);
+    } else {
+      Serial.print("failed with state ");
+      Serial.println(mqttClient.state());
+      delay(2000);
+    }
+  }
+}
+
+void setup() {
+  Serial.begin(115200);
+  delay(1000);
+  vga.init(VGAMode::MODE320x240, VGA_RED_PIN, VGA_GREEN_PIN, VGA_BLUE_PIN, VGA_HSYNC_PIN, VGA_VSYNC_PIN);
+  vga.setFont(Font6x8);
+  vga.clear(vga.RGB(0, 0, 0));
+  Serial.println("VGA Initialized.");
+  connectToWiFi();
+  mqttClient.setServer(mqtt_broker, mqtt_port);
+  mqttClient.setCallback(mqttCallback);
+  connectToMQTT();
+  currentState = STATE_IDLE;
+  updateDisplay();
+}
+
+void loop() {
+  if (!mqttClient.connected()) {
+    connectToMQTT();
+  }
+  mqttClient.loop();
+  if (currentState == STATE_SUCCESS || currentState == STATE_FAILED) {
+    if (millis() - stateStartTime >= 5000) {
+      currentState = STATE_IDLE;
+      updateDisplay();
+    }
+  }
+}

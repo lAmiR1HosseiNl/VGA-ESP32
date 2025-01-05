@@ -1,0 +1,24 @@
+VGA
+============
+1-white-background Idle Page +
+2-Text Font Arial
+3-Remove Elapesd From Idle Page +
+4-Box For Idle Page
+5-Image IUST Overall
+6-Image Check for success login
+7-Image Cross for fail login
+8-Box for login
+9-Success logout
+10-Elapess time for success logout
+11-Box for logout
+12-Box for login
+13-Table in Idle Box
+14-Box For Failed
+15-MQTT Connecting Show On VGA
+16-Centerize
+
+Python
+=======
+1-Logout
+2-Complete Database
+3-Wait 
