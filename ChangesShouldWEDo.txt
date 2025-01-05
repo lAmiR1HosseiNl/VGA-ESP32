@@ -1,7 +1,7 @@
 VGA
 ============
 1-white-background Idle Page +
-2-Text Font Arial
+2-Text Font Arial +-
 3-Remove Elapesd From Idle Page +
 4-Box For Idle Pagec    +
 5-Image IUST Overall
