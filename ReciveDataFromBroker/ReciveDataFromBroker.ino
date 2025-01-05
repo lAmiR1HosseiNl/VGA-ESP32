@@ -14,8 +14,8 @@
  * 2) Wi-Fi and MQTT Credentials
  *    (Adjust for your environment)
  ****************************************************/
-const char* ssid         = "Your_WiFi_SSID";
-const char* password     = "Your_WiFi_Password";
+const char* ssid         = "AmirHossein";
+const char* password     = "amir1382raeghi";
 
 const char* mqtt_broker  = "broker.emqx.io";
 const char* mqtt_topic   = "Employees Es4031/topic";
@@ -54,7 +54,6 @@ struct Employee {
   String  name;
   String  enter_time;
   String  exit_time;
-  int     elapsed_time;
 };
 
 /****************************************************
@@ -108,60 +107,84 @@ void printText(int x, int y, const char* text, uint16_t color)
 }
 
 /****************************************************
- * 12) IDLE Screen
+ * 12) Draw Box: Draws a rectangle with a border
+ ****************************************************/
+void drawBox(int x, int y, int width, int height, uint16_t borderColor, uint16_t fillColor)
+{
+  // Fill the box
+  for (int i = y; i < y + height; i++) {
+    for (int j = x; j < x + width; j++) {
+      vga.dotFast(j, i, fillColor);
+    }
+  }
+  // Draw the border
+  for (int i = 0; i < width; i++) {
+    vga.dotFast(x + i, y, borderColor); // Top border
+    vga.dotFast(x + i, y + height - 1, borderColor); // Bottom border
+  }
+  for (int i = 0; i < height; i++) {
+    vga.dotFast(x, y + i, borderColor); // Left border
+    vga.dotFast(x + width - 1, y + i, borderColor); // Right border
+  }
+}
+
+/****************************************************
+ * 13) IDLE Screen
  *     - Blue background
  *     - Shows Employee table ignoring status column
  ****************************************************/
 void drawIdleScreen()
 {
   // 1) Blue background
-  fillScreen(vga.RGB(0, 0, 255));
+  fillScreen(vga.RGB(255, 255, 255));
 
   // 2) Title
-  printText(10, 10, "Employee List (IDLE State)", vga.RGB(255, 255, 255));
+  printText(10, 10, "Employee List", vga.RGB(0, 0, 0));
 
-  // 3) Table header
-  int startY = 30;
-  printText(10, startY,
-            "ID   NAME           ENTER_TIME          EXIT_TIME           ELAPSED",
-            vga.RGB(200, 200, 200));
+  // 3) Table header with borders
+  int tableX = 10;
+  int tableY = 30;
+  int rowHeight = 10;
+  int colWidths[] = {30, 100, 80, 80};
 
-  // 4) Print each employee row
-  int rowSpacing = 10;
-  int y = startY + rowSpacing + 5;
+  // Draw header background
+  drawBox(tableX, tableY, SCREEN_WIDTH - 20, rowHeight, vga.RGB(0, 0, 0), vga.RGB(148, 227, 178));
+  printText(tableX + 2, tableY + 2, "ID", vga.RGB(0, 0, 0));
+  printText(tableX + colWidths[0] + 2, tableY + 2, "Name", vga.RGB(0, 0, 0));
+  printText(tableX + colWidths[0] + colWidths[1] + 2, tableY + 2, "Enter Time", vga.RGB(0, 0, 0));
+  printText(tableX + colWidths[0] + colWidths[1] + colWidths[2] + 2, tableY + 2, "Exit Time", vga.RGB(0, 0, 0));
 
-  for (size_t i = 0; i < employees.size(); i++)
-  {
-    // Buffer for 1 row
-    char buffer[200];
-    snprintf(
-      buffer,
-      sizeof(buffer),
-      "%-4d %-15s %-20s %-20s %-6d",
-      employees[i].id,
-      employees[i].name.substring(0,15).c_str(),
-      employees[i].enter_time.substring(0,20).c_str(),
-      employees[i].exit_time.substring(0,20).c_str(),
-      employees[i].elapsed_time
-    );
+  // Draw each employee row
+  int y = tableY + rowHeight;
+  for (size_t i = 0; i < employees.size(); i++) {
+    if (y + rowHeight > SCREEN_HEIGHT - 10) break; // Prevent overflow
 
-    printText(10, y, buffer, vga.RGB(0, 0, 0));
-    y += rowSpacing;
-    
-    // Prevent printing past the bottom of the screen
-    if (y > SCREEN_HEIGHT - 10)
-      break;
+    // Draw row background
+    drawBox(tableX, y, SCREEN_WIDTH - 20, rowHeight, vga.RGB(0, 0, 0), vga.RGB(255, 255, 255));
+
+    // Print row data
+    char buffer[100];
+    snprintf(buffer, sizeof(buffer), "%d", employees[i].id);
+    printText(tableX + 2, y + 2, buffer, vga.RGB(0, 0, 0));
+
+    printText(tableX + colWidths[0] + 2, y + 2, employees[i].name.substring(0, 15).c_str(), vga.RGB(0, 0, 0));
+    printText(tableX + colWidths[0] + colWidths[1] + 2, y + 2, employees[i].enter_time.c_str(), vga.RGB(0, 0, 0));
+    printText(tableX + colWidths[0] + colWidths[1] + colWidths[2] + 2, y + 2, employees[i].exit_time.c_str(), vga.RGB(0, 0, 0));
+
+    y += rowHeight;
   }
 }
 
 /****************************************************
- * 13) SUCCESS Screen
+ * 14) SUCCESS Screen
  *     - Green background
  *     - Shows "Welcome {Name}" + tick icon
  ****************************************************/
 void drawSuccessScreen()
 {
-  fillScreen(vga.RGB(0, 255, 0)); // green
+  fillScreen(vga.RGB(148, 227, 178)); // greenish background
+  drawBox(30, 30, 260, 100, vga.RGB(0, 0, 0), vga.RGB(148, 227, 178));
+
   String welcomeMsg = "Welcome " + lastSuccessName;
   printText(40, 40, welcomeMsg.c_str(), vga.RGB(0, 0, 0));
 
@@ -170,13 +193,15 @@ void drawSuccessScreen()
 }
 
 /****************************************************
- * 14) FAILED Screen
+ * 15) FAILED Screen
  *     - Red background
  *     - Shows "Failed to login" + cross icon
  ****************************************************/
 void drawFailedScreen()
 {
-  fillScreen(vga.RGB(255, 0, 0)); // red
+  fillScreen(vga.RGB(255, 0, 0)); // red background
+  drawBox(30, 30, 260, 100, vga.RGB(0, 0, 0), vga.RGB(255, 255, 255));
+
   printText(40, 40, "Failed to login", vga.RGB(0, 0, 0));
 
   // Show cross icon (✗)
@@ -184,7 +209,7 @@ void drawFailedScreen()
 }
 
 /****************************************************
- * 15) Update the Screen Based on Current State
+ * 16) Update the Screen Based on Current State
  ****************************************************/
 void updateDisplay()
 {
@@ -203,7 +228,7 @@ void updateDisplay()
 }
 
 /****************************************************
- * 16) MQTT Callback: When a Message Arrives
+ * 17) MQTT Callback: When a Message Arrives
  ****************************************************/
 void mqttCallback(char* topic, byte* payload, unsigned int length)
 {
@@ -232,7 +257,6 @@ void mqttCallback(char* topic, byte* payload, unsigned int length)
   String enter_time   = doc["enter_time"]   | "";
   String exit_time    = doc["exit_time"]    | "";
   String status       = doc["status"]       | "";
-  int    elapsed_time = doc["elapsed_time"] | 0;
 
   Serial.printf("Parsed => ID:%d, Name:%s, Status:%s\n", id, name.c_str(), status.c_str());
 
@@ -244,7 +268,6 @@ void mqttCallback(char* topic, byte* payload, unsigned int length)
       emp.name         = name;
       emp.enter_time   = enter_time;
       emp.exit_time    = exit_time.isEmpty() ? "N/A" : exit_time;
-      emp.elapsed_time = elapsed_time;
       found = true;
       break;
     }
@@ -255,7 +278,6 @@ void mqttCallback(char* topic, byte* payload, unsigned int length)
     newEmp.name         = name;
     newEmp.enter_time   = enter_time;
     newEmp.exit_time    = exit_time.isEmpty() ? "N/A" : exit_time;
-    newEmp.elapsed_time = elapsed_time;
     employees.push_back(newEmp);
   }
 
@@ -281,7 +303,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length)
 }
 
 /****************************************************
- * 17) Connect to Wi-Fi
+ * 18) Connect to Wi-Fi
  ****************************************************/
 void connectToWiFi()
 {
@@ -300,7 +322,7 @@ void connectToWiFi()
 }
 
 /****************************************************
- * 18) Connect to MQTT Broker
+ * 19) Connect to MQTT Broker
  ****************************************************/
 void connectToMQTT()
 {
@@ -326,7 +348,7 @@ void connectToMQTT()
 }
 
 /****************************************************
- * 19) Setup
+ * 20) Setup
  ****************************************************/
 void setup()
 {
@@ -359,7 +381,7 @@ void setup()
 }
 
 /****************************************************
- * 20) Main Loop
+ * 21) Main Loop
  ****************************************************/
 void loop()
 {
