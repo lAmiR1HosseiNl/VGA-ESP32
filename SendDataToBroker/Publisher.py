@@ -147,7 +147,7 @@ def simulate_attendance():
         # Start a thread to update status to 'Idle' after 5 seconds
         threading.Thread(target=update_status_to_idle, args=(emp["ID"],)).start()
         
-        time.sleep(60)  # Simulate time between attendances
+        time.sleep(2)  # Simulate time between attendances
 
 def main():
     try:
