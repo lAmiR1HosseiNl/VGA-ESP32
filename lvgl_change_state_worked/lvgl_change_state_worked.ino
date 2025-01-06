@@ -97,35 +97,52 @@ void connectToMQTT() {
     }
 }
 
+lv_obj_t *idle_screen;
 lv_obj_t *success_screen;
 lv_obj_t *failure_screen;
+unsigned long last_screen_change = 0;
+const unsigned long screen_timeout = 3000; // 3 seconds timeout
 
 /****************************************************
  * 6) Screen Management Functions
  ****************************************************/
-void create_response_screens() {
+void create_screens() {
+    // Idle Screen (Default)
+    idle_screen = lv_obj_create(NULL);
+    lv_obj_t *idle_label = lv_label_create(idle_screen);
+    lv_label_set_text(idle_label, "Waiting for MQTT message...");
+    lv_obj_align(idle_label, LV_ALIGN_CENTER, 0, 0);
+
     // Success Screen
     success_screen = lv_obj_create(NULL);
     lv_obj_t *success_label = lv_label_create(success_screen);
     lv_label_set_text(success_label, "Login Successful!");
     lv_obj_align(success_label, LV_ALIGN_CENTER, 0, 0);
 
-    // Failure Screen
+    // Failure Screen (With Red Background)
     failure_screen = lv_obj_create(NULL);
+    lv_obj_set_style_bg_color(failure_screen, lv_color_hex(0xFF0000), LV_PART_MAIN); // Set background to RED
     lv_obj_t *failure_label = lv_label_create(failure_screen);
     lv_label_set_text(failure_label, "Login Failed!");
     lv_obj_align(failure_label, LV_ALIGN_CENTER, 0, 0);
+
+    // Show idle screen first
+    lv_scr_load(idle_screen);
 }
 
-void handleParsedMessage(const String &status, const String &name, const String &enter_time, const String &exit_time) {
+void switch_screen(lv_obj_t *screen) {
+    lv_scr_load(screen);
+    lv_refr_now(NULL); // Force LVGL refresh
+    last_screen_change = millis(); // Record the time of screen change
+}
+
+void handleParsedMessage(const String &status) {
     if (status == "Success") {
         Serial.println("Switching to success screen...");
-        lv_scr_load(success_screen);
-        lv_refr_now(NULL); // Force LVGL refresh to update the screen
+        switch_screen(success_screen);
     } else if (status == "Failed") {
         Serial.println("Switching to failure screen...");
-        lv_scr_load(failure_screen);
-        lv_refr_now(NULL);
+        switch_screen(failure_screen);
     } else {
         Serial.println("Unhandled status: " + status);
     }
@@ -160,34 +177,17 @@ void callback(char *topic, byte *payload, unsigned int length) {
         return; // Exit if JSON parsing fails
     }
 
-    // Extract fields from the JSON message
-    const int id = doc["ID"] | -1; // Default to -1 if "ID" is missing
-    const String name = doc["name"] | "Unknown";
-    const String enter_time = doc["enter_time"] | "N/A";
-    const String exit_time = doc["exit_time"] | "N/A";
+    // Extract status field
     const String status = doc["status"] | "Unknown";
 
-    Serial.printf("Parsed Message - ID: %d, Name: %s, Enter Time: %s, Exit Time: %s, Status: %s\n",
-                  id, name.c_str(), enter_time.c_str(), exit_time.c_str(), status.c_str());
+    Serial.printf("Parsed Message - Status: %s\n", status.c_str());
 
     // Handle the message based on the status
-    handleParsedMessage(status, name, enter_time, exit_time);
+    handleParsedMessage(status);
 }
 
 /****************************************************
- * 8) LVGL UI Creation
- ****************************************************/
-void create_ui() {
-    lv_obj_t *screen = lv_scr_act();
-
-    // Add a message to the main screen
-    lv_obj_t *label = lv_label_create(screen);
-    lv_label_set_text(label, "Waiting for MQTT message...");
-    lv_obj_align(label, LV_ALIGN_CENTER, 0, 0);
-}
-
-/****************************************************
- * 9) Setup and Loop
+ * 8) Setup and Loop
  ****************************************************/
 void setup() {
     Serial.begin(115200);
@@ -217,9 +217,8 @@ void setup() {
     disp_drv.draw_buf = &draw_buf;
     lv_disp_drv_register(&disp_drv);
 
-    // Create the UI
-    create_ui();
-    create_response_screens();
+    // Create the UI screens
+    create_screens();
 }
 
 void loop() {
@@ -230,6 +229,12 @@ void loop() {
 
     // Process MQTT messages
     client.loop();
+
+    // Return to idle screen after timeout
+    if (millis() - last_screen_change > screen_timeout) {
+        lv_scr_load(idle_screen);
+        lv_refr_now(NULL);
+    }
 
     // Handle LVGL tasks
     lv_timer_handler();
