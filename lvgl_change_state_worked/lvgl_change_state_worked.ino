@@ -108,8 +108,9 @@ lv_obj_t *table;
 unsigned long last_screen_change = 0;
 const unsigned long screen_timeout = 3000;
 
-const int max_entries = 5;
+const int max_entries = 10;
 struct Attendee {
+    int id;
     String name;
     String enter_time;
     String exit_time;
@@ -117,17 +118,21 @@ struct Attendee {
 Attendee attendees[max_entries];
 
 void update_table() {
+    lv_table_set_col_cnt(table, 4); // ID, Name, Enter, Exit
     lv_table_set_row_cnt(table, max_entries + 1); // Extra row for header
 
     // Set headers
-    lv_table_set_cell_value(table, 0, 0, "Name");
-    lv_table_set_cell_value(table, 0, 1, "Enter Time");
-    lv_table_set_cell_value(table, 0, 2, "Exit Time");
+    lv_table_set_cell_value(table, 0, 0, "ID");
+    lv_table_set_cell_value(table, 0, 1, "Name");
+    lv_table_set_cell_value(table, 0, 2, "Enter");
+    lv_table_set_cell_value(table, 0, 3, "Exit");
 
     for (int i = 0; i < max_entries; i++) {
-        lv_table_set_cell_value(table, i + 1, 0, attendees[i].name.c_str());
-        lv_table_set_cell_value(table, i + 1, 1, attendees[i].enter_time.c_str());
-        lv_table_set_cell_value(table, i + 1, 2, attendees[i].exit_time.c_str());
+        String id_str = String(attendees[i].id);
+        lv_table_set_cell_value(table, i + 1, 0, id_str.c_str());
+        lv_table_set_cell_value(table, i + 1, 1, attendees[i].name.c_str());
+        lv_table_set_cell_value(table, i + 1, 2, attendees[i].enter_time.c_str());
+        lv_table_set_cell_value(table, i + 1, 3, attendees[i].exit_time.c_str());
     }
 }
 
@@ -135,7 +140,7 @@ void create_screens() {
     // Idle Screen with Table
     idle_screen = lv_obj_create(NULL);
     table = lv_table_create(idle_screen);
-    lv_obj_set_size(table, 300, 150);
+    lv_obj_set_size(table, 300, 200);
     lv_obj_align(table, LV_ALIGN_CENTER, 0, 0);
     update_table();
 
@@ -186,13 +191,14 @@ void callback(char *topic, byte *payload, unsigned int length) {
         return;
     }
 
+    int id = doc["ID"] | -1;
     String status = doc["status"] | "Unknown";
     String name = doc["name"] | "Unknown";
     String enter_time = doc["enter_time"] | "N/A";
     String exit_time = doc["exit_time"] | "N/A";
 
-    Serial.printf("Parsed: Name: %s, Enter Time: %s, Exit Time: %s, Status: %s\n",
-                  name.c_str(), enter_time.c_str(), exit_time.c_str(), status.c_str());
+    Serial.printf("Parsed: ID: %d, Name: %s, Enter: %s, Exit: %s, Status: %s\n",
+                  id, name.c_str(), enter_time.c_str(), exit_time.c_str(), status.c_str());
 
     if (status == "Success") {
         switch_screen(success_screen);
@@ -200,15 +206,11 @@ void callback(char *topic, byte *payload, unsigned int length) {
         switch_screen(failure_screen);
     }
 
-    // Shift previous entries up
     for (int i = max_entries - 1; i > 0; i--) {
         attendees[i] = attendees[i - 1];
     }
 
-    // Add new entry at index 0
-    attendees[0] = {name, enter_time, exit_time};
-
-    // Update table in idle screen
+    attendees[0] = {id, name, enter_time, exit_time};
     update_table();
 }
 
