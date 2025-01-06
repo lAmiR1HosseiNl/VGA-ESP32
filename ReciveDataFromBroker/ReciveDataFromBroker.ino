@@ -10,6 +10,7 @@
 #include <ESP32Video.h>          
 #include <Ressources/Font6x8.h>  // Built-in 6x8 font
 #include "Arial12.h"
+#include "Arial8.h"
 /*******************************************************************
  * drawCharArial12():
  *   - Renders a single character C at (x, y) using the 18-pixel-high 
@@ -102,6 +103,50 @@ void drawStringArial12(VGA3Bit &vga, int x, int y, const char *text, uint16_t co
     drawCharArial12(vga, x, y, c, color);
 
     // Advance x by the character's width plus maybe 1 for spacing
+    x += width + 1;
+  }
+}
+
+void drawCharArial8(VGA3Bit &vga, int x, int y, char c, uint16_t color)
+{
+  if (c < 32 || c > 127) c = '?';
+
+  uint8_t index = Arial8Index_table[(uint8_t)c];
+  uint8_t width = Arial8Width_table[index];
+  uint16_t offset = Arial8Offset_table[index];
+  uint16_t nextOffset = (index < 95) ? Arial8Offset_table[index + 1] : sizeof(Arial8Data_table);
+  uint16_t glyphSize = nextOffset - offset;
+  const unsigned char *glyphData = &Arial8Data_table[offset];
+
+  for (int row = 0; row < 10; row++) // Arial8 is 10px high
+  {
+    for (int col = 0; col < width; col++)
+    {
+      int bitIndex = row * width + col;
+      int byteIndex = bitIndex / 8;
+      int bitInByte = 7 - (bitIndex % 8);
+
+      if (byteIndex < glyphSize)
+      {
+        unsigned char b = glyphData[byteIndex];
+        if ((b >> bitInByte) & 0x01)
+          vga.dotFast(x + col, y + row, color);
+      }
+    }
+  }
+}
+
+void drawStringArial8(VGA3Bit &vga, int x, int y, const char *text, uint16_t color)
+{
+  int startX = x;
+  while (*text)
+  {
+    char c = *text++;
+    if (c == '\n') { x = startX; y += 10; continue; }
+
+    uint8_t index = Arial8Index_table[(uint8_t)c];
+    uint8_t width = Arial8Width_table[index];
+    drawCharArial8(vga, x, y, c, color);
     x += width + 1;
   }
 }
@@ -241,15 +286,17 @@ void drawIdleScreen()
   // 3) Table header with borders
   int tableX = 10;
   int tableY = 30;
-  int rowHeight = 10;
+  int rowHeight = 12;
   int colWidths[] = {30, 100, 80, 80};
 
   // Draw header background
-  drawBox(tableX, tableY, SCREEN_WIDTH - 20, rowHeight, vga.RGB(0, 0, 0), vga.RGB(148, 227, 178));
-  printText(tableX + 2, tableY + 2, "ID", vga.RGB(0, 0, 0));
-  printText(tableX + colWidths[0] + 2, tableY + 2, "Name", vga.RGB(0, 0, 0));
-  printText(tableX + colWidths[0] + colWidths[1] + 2, tableY + 2, "Enter Time", vga.RGB(0, 0, 0));
-  printText(tableX + colWidths[0] + colWidths[1] + colWidths[2] + 2, tableY + 2, "Exit Time", vga.RGB(0, 0, 0));
+  drawBox(tableX, tableY, /*width*/ (colWidths[0] + colWidths[1] + colWidths[2] + colWidths[3]),
+          /*height*/ rowHeight,
+          /*borderColor*/ vga.RGB(0, 0, 0),
+          /*fillColor*/   vga.RGB(148, 227, 178));  drawStringArial8(vga, tableX + 2, tableY + 2, "ID", vga.RGB(0, 0, 0));
+  drawStringArial8(vga, tableX + colWidths[0] + 2, tableY + 2, "Name", vga.RGB(0, 0, 0));
+  drawStringArial8(vga, tableX + colWidths[0] + colWidths[1] + 2, tableY + 2, "Enter Time", vga.RGB(0, 0, 0));
+  drawStringArial8(vga, tableX + colWidths[0] + colWidths[1] + colWidths[2] + 2, tableY + 2, "Exit Time", vga.RGB(0, 0, 0));
 
   // Draw each employee row
   int y = tableY + rowHeight;
@@ -257,16 +304,19 @@ void drawIdleScreen()
     if (y + rowHeight > SCREEN_HEIGHT - 10) break; // Prevent overflow
 
     // Draw row background
-    drawBox(tableX, y, SCREEN_WIDTH - 20, rowHeight, vga.RGB(0, 0, 0), vga.RGB(255, 255, 255));
-
+    drawBox(tableX, y,
+            colWidths[0] + colWidths[1] + colWidths[2] + colWidths[3],
+            rowHeight,
+            vga.RGB(0, 0, 0),
+            vga.RGB(255, 255, 255));
     // Print row data
     char buffer[100];
     snprintf(buffer, sizeof(buffer), "%d", employees[i].id);
-    printText(tableX + 2, y + 2, buffer, vga.RGB(0, 0, 0));
+    drawStringArial8(vga, tableX + 2, y + 2, buffer, vga.RGB(0, 0, 0));
 
-    printText(tableX + colWidths[0] + 2, y + 2, employees[i].name.substring(0, 15).c_str(), vga.RGB(0, 0, 0));
-    printText(tableX + colWidths[0] + colWidths[1] + 2, y + 2, employees[i].enter_time.c_str(), vga.RGB(0, 0, 0));
-    printText(tableX + colWidths[0] + colWidths[1] + colWidths[2] + 2, y + 2, employees[i].exit_time.c_str(), vga.RGB(0, 0, 0));
+    drawStringArial8(vga, tableX + colWidths[0] + 2, y + 2, employees[i].name.substring(0, 15).c_str(), vga.RGB(0, 0, 0));
+    drawStringArial8(vga, tableX + colWidths[0] + colWidths[1] + 2, y + 2, employees[i].enter_time.c_str(), vga.RGB(0, 0, 0));
+    drawStringArial8(vga, tableX + colWidths[0] + colWidths[1] + colWidths[2] + 2, y + 2, employees[i].exit_time.c_str(), vga.RGB(0, 0, 0));
 
     y += rowHeight;
   }
@@ -283,10 +333,10 @@ void drawSuccessScreen()
   drawBox(30, 30, 260, 100, vga.RGB(0, 0, 0), vga.RGB(148, 227, 178));
 
   String welcomeMsg = "Welcome " + lastSuccessName;
-  printText(40, 40, welcomeMsg.c_str(), vga.RGB(0, 0, 0));
+  drawStringArial12(vga, 40, 40, welcomeMsg.c_str(), vga.RGB(0, 0, 0));
 
   // Show tick icon (✓)
-  printText(40, 60, "✓", vga.RGB(0, 0, 0));
+  // printText(40, 60, "✓", vga.RGB(0, 0, 0));
 }
 
 /****************************************************
@@ -299,10 +349,10 @@ void drawFailedScreen()
   fillScreen(vga.RGB(255, 0, 0)); // red background
   drawBox(30, 30, 260, 100, vga.RGB(0, 0, 0), vga.RGB(255, 255, 255));
 
-  printText(40, 40, "Failed to login", vga.RGB(0, 0, 0));
+  drawStringArial12(vga, 40, 40, "Failed to login", vga.RGB(0, 0, 0));
 
   // Show cross icon (✗)
-  printText(40, 60, "✗", vga.RGB(0, 0, 0));
+  // printText(40, 60, "✗", vga.RGB(0, 0, 0));
 }
 
 /****************************************************
