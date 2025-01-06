@@ -36,14 +36,14 @@ static lv_color_t buf2[screenWidth * 10];
 /****************************************************
  * 3) WiFi and MQTT Settings
  ****************************************************/
-const char *ssid = "AmirHossein"; // Replace with your Wi-Fi name
-const char *password = "amir1382raeghi"; // Replace with your Wi-Fi password
+const char *ssid = "AmirHossein";
+const char *password = "amir1382raeghi";
 
 const char *mqtt_broker = "broker.emqx.io";
-const char *topic = "Employees Es4031/topic"; // MQTT topic to publish and subscribe to
-const char *mqtt_username = "emqx";           // Optional username
-const char *mqtt_password = "public";         // Optional password
-const int mqtt_port = 1883;                   // Non-SSL port for MQTT
+const char *topic = "Employees Es4031/topic";
+const char *mqtt_username = "emqx";
+const char *mqtt_password = "public";
+const int mqtt_port = 1883;
 
 WiFiClient espClient;
 PubSubClient client(espClient);
@@ -92,26 +92,52 @@ void connectToMQTT() {
         } else {
             Serial.print("Failed to connect to MQTT broker. State: ");
             Serial.println(client.state());
-            delay(2000); // Retry every 2 seconds
+            delay(2000);
         }
     }
 }
 
-lv_obj_t *idle_screen;
-lv_obj_t *success_screen;
-lv_obj_t *failure_screen;
-unsigned long last_screen_change = 0;
-const unsigned long screen_timeout = 3000; // 3 seconds timeout
-
 /****************************************************
  * 6) Screen Management Functions
  ****************************************************/
+lv_obj_t *idle_screen;
+lv_obj_t *success_screen;
+lv_obj_t *failure_screen;
+lv_obj_t *table;
+
+unsigned long last_screen_change = 0;
+const unsigned long screen_timeout = 3000;
+
+const int max_entries = 5;
+struct Attendee {
+    String name;
+    String enter_time;
+    String exit_time;
+};
+Attendee attendees[max_entries];
+
+void update_table() {
+    lv_table_set_row_cnt(table, max_entries + 1); // Extra row for header
+
+    // Set headers
+    lv_table_set_cell_value(table, 0, 0, "Name");
+    lv_table_set_cell_value(table, 0, 1, "Enter Time");
+    lv_table_set_cell_value(table, 0, 2, "Exit Time");
+
+    for (int i = 0; i < max_entries; i++) {
+        lv_table_set_cell_value(table, i + 1, 0, attendees[i].name.c_str());
+        lv_table_set_cell_value(table, i + 1, 1, attendees[i].enter_time.c_str());
+        lv_table_set_cell_value(table, i + 1, 2, attendees[i].exit_time.c_str());
+    }
+}
+
 void create_screens() {
-    // Idle Screen (Default)
+    // Idle Screen with Table
     idle_screen = lv_obj_create(NULL);
-    lv_obj_t *idle_label = lv_label_create(idle_screen);
-    lv_label_set_text(idle_label, "Waiting for MQTT message...");
-    lv_obj_align(idle_label, LV_ALIGN_CENTER, 0, 0);
+    table = lv_table_create(idle_screen);
+    lv_obj_set_size(table, 300, 150);
+    lv_obj_align(table, LV_ALIGN_CENTER, 0, 0);
+    update_table();
 
     // Success Screen
     success_screen = lv_obj_create(NULL);
@@ -121,31 +147,18 @@ void create_screens() {
 
     // Failure Screen (With Red Background)
     failure_screen = lv_obj_create(NULL);
-    lv_obj_set_style_bg_color(failure_screen, lv_color_hex(0xFF0000), LV_PART_MAIN); // Set background to RED
+    lv_obj_set_style_bg_color(failure_screen, lv_color_hex(0xFF0000), LV_PART_MAIN);
     lv_obj_t *failure_label = lv_label_create(failure_screen);
     lv_label_set_text(failure_label, "Login Failed!");
     lv_obj_align(failure_label, LV_ALIGN_CENTER, 0, 0);
 
-    // Show idle screen first
     lv_scr_load(idle_screen);
 }
 
 void switch_screen(lv_obj_t *screen) {
     lv_scr_load(screen);
-    lv_refr_now(NULL); // Force LVGL refresh
-    last_screen_change = millis(); // Record the time of screen change
-}
-
-void handleParsedMessage(const String &status) {
-    if (status == "Success") {
-        Serial.println("Switching to success screen...");
-        switch_screen(success_screen);
-    } else if (status == "Failed") {
-        Serial.println("Switching to failure screen...");
-        switch_screen(failure_screen);
-    } else {
-        Serial.println("Unhandled status: " + status);
-    }
+    lv_refr_now(NULL);
+    last_screen_change = millis();
 }
 
 /****************************************************
@@ -157,33 +170,46 @@ void callback(char *topic, byte *payload, unsigned int length) {
     Serial.print("Message: ");
     String message = "";
     for (int i = 0; i < length; i++) {
-        char c = (char)payload[i];
-        message += c;
-        Serial.print(c);
+        message += (char)payload[i];
+        Serial.print((char)payload[i]);
     }
     Serial.println("\n-----------------------");
 
-    message.trim(); // Remove whitespace
+    message.trim();
 
-    Serial.println("Processed Message: " + message);
-
-    // Parse the JSON message
     StaticJsonDocument<256> doc;
     DeserializationError error = deserializeJson(doc, message);
 
     if (error) {
         Serial.print("JSON Parsing Error: ");
         Serial.println(error.c_str());
-        return; // Exit if JSON parsing fails
+        return;
     }
 
-    // Extract status field
-    const String status = doc["status"] | "Unknown";
+    String status = doc["status"] | "Unknown";
+    String name = doc["name"] | "Unknown";
+    String enter_time = doc["enter_time"] | "N/A";
+    String exit_time = doc["exit_time"] | "N/A";
 
-    Serial.printf("Parsed Message - Status: %s\n", status.c_str());
+    Serial.printf("Parsed: Name: %s, Enter Time: %s, Exit Time: %s, Status: %s\n",
+                  name.c_str(), enter_time.c_str(), exit_time.c_str(), status.c_str());
 
-    // Handle the message based on the status
-    handleParsedMessage(status);
+    if (status == "Success") {
+        switch_screen(success_screen);
+    } else if (status == "Failed") {
+        switch_screen(failure_screen);
+    }
+
+    // Shift previous entries up
+    for (int i = max_entries - 1; i > 0; i--) {
+        attendees[i] = attendees[i - 1];
+    }
+
+    // Add new entry at index 0
+    attendees[0] = {name, enter_time, exit_time};
+
+    // Update table in idle screen
+    update_table();
 }
 
 /****************************************************
@@ -191,24 +217,17 @@ void callback(char *topic, byte *payload, unsigned int length) {
  ****************************************************/
 void setup() {
     Serial.begin(115200);
-
-    // Initialize VGA Display
     vga.init(VGAMode::MODE320x240, VGA_RED_PIN, VGA_GREEN_PIN, VGA_BLUE_PIN, VGA_HSYNC_PIN, VGA_VSYNC_PIN);
     vga.clear();
 
-    // Connect to WiFi
     connectToWiFi();
-
-    // Configure and connect to MQTT
     client.setServer(mqtt_broker, mqtt_port);
     client.setCallback(callback);
     connectToMQTT();
 
-    // Initialize LVGL
     lv_init();
     lv_disp_draw_buf_init(&draw_buf, buf1, buf2, screenWidth * 10);
 
-    // Set up LVGL display driver
     static lv_disp_drv_t disp_drv;
     lv_disp_drv_init(&disp_drv);
     disp_drv.hor_res = screenWidth;
@@ -217,26 +236,18 @@ void setup() {
     disp_drv.draw_buf = &draw_buf;
     lv_disp_drv_register(&disp_drv);
 
-    // Create the UI screens
     create_screens();
 }
 
 void loop() {
-    // Ensure MQTT client stays connected
-    if (!client.connected()) {
-        connectToMQTT();
-    }
-
-    // Process MQTT messages
+    if (!client.connected()) connectToMQTT();
     client.loop();
 
-    // Return to idle screen after timeout
     if (millis() - last_screen_change > screen_timeout) {
         lv_scr_load(idle_screen);
         lv_refr_now(NULL);
     }
 
-    // Handle LVGL tasks
     lv_timer_handler();
     delay(5);
 }
