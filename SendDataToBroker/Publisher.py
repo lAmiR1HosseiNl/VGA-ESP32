@@ -109,7 +109,7 @@ def publish_employee_data(employee):
         print(f"Sending data: {json_data}")
         client.publish(TOPIC, json_data)
     except Exception as e:
-        print(f"Error publishing data: {e}")
+        print(f"Error publishing data: {e}")    
 
 def simulate_attendance():
     # Example employees data
