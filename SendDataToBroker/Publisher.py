@@ -71,7 +71,7 @@ def update_status_to_idle(employee_id):
             enter_time = datetime.datetime.strptime(enter_time_str, "%H:%M:%S")
             current_time = datetime.datetime.now()
             elapsed_time = int((current_time - enter_time).total_seconds())
-            exit_time_str = current_time.strftime("%Y-%m-%d %H:%M:%S")
+            exit_time_str =  datetime.datetime.now().strftime("%H:%M:%S")
             
             # Update status to 'Idle', set exit_time and elapsed_time
             cur.execute('''
@@ -127,6 +127,21 @@ def simulate_attendance():
         {
             "ID": 2,
             "name": "Ali",
+            "status": "Success"
+        },
+        {
+            "ID": 3,
+            "name": "Ali2",
+            "status": "Success"
+        },
+                {
+            "ID": 4,
+            "name": "Ali3",
+            "status": "Success"
+        },
+                {
+            "ID": 5,
+            "name": "Ali4",
             "status": "Success"
         }
     ]

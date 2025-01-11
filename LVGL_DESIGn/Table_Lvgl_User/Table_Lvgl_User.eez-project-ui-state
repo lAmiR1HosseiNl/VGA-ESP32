@@ -1,8 +1,6 @@
 {
   "navigation": {
     "selectedUserPageObject": "[Table_Lvgl_User.eez-project]:/userPages/2",
-    "selectedGlobalVariableObject": "[Table_Lvgl_User.eez-project]:/variables/globalVariables/-1",
-    "selectedThemeObject": "[Table_Lvgl_User.eez-project]:/themes/-1",
     "subnavigationSelectedItems": {
       "variables-tab/sub-navigation/selected-item": "Global"
     }
@@ -72,6 +70,7 @@
           },
           {
             "type": "border",
+            "selected": 1,
             "location": "bottom",
             "children": [
               {
@@ -190,18 +189,29 @@
               "type": "tabset",
               "id": "EDITORS",
               "weight": 55.99526066350711,
-              "selected": 1,
+              "selected": 2,
               "enableDeleteWhenEmpty": false,
               "enableClose": false,
               "children": [
                 {
                   "type": "tab",
-                  "id": "#e7d9dd24-1140-48ef-a2df-6ff957bcb63d",
+                  "id": "#2966d61a-7018-4645-ba81-d28861e867c3",
                   "name": "Main",
                   "component": "editor",
                   "config": {
                     "objectPath": "[Table_Lvgl_User.eez-project]:/userPages/0",
                     "permanent": false
+                  },
+                  "icon": "svg:page"
+                },
+                {
+                  "type": "tab",
+                  "id": "#e7d9dd24-1140-48ef-a2df-6ff957bcb63d",
+                  "name": "Success_Page",
+                  "component": "editor",
+                  "config": {
+                    "objectPath": "[Table_Lvgl_User.eez-project]:/userPages/1",
+                    "permanent": true
                   },
                   "icon": "svg:page"
                 },
@@ -466,7 +476,7 @@
                   "name": "Success_Page",
                   "component": "editor",
                   "config": {
-                    "objectPath": "[Table_Lvgl_User.eez-project]:/userPages/0",
+                    "objectPath": "[Table_Lvgl_User.eez-project]:/userPages/1",
                     "permanent": false
                   },
                   "icon": "svg:page"
@@ -786,7 +796,8 @@
                       "component": "styles",
                       "enableClose": false
                     }
-                  ]
+                  ],
+                  "active": true
                 },
                 {
                   "type": "tabset",
@@ -1024,8 +1035,8 @@
       },
       "transform": {
         "translate": {
-          "x": -400,
-          "y": -240
+          "x": -401.60003662109375,
+          "y": -242.40000915527344
         },
         "scale": 1
       },
@@ -1063,7 +1074,7 @@
   "searchMatchWholeWord": false,
   "replaceEnabled": false,
   "replaceText": "",
-  "pageRuntimeFrontFace": false,
+  "pageRuntimeFrontFace": true,
   "breakpoints": {},
   "watchExpressions": [],
   "showComponentDescriptions": true,
